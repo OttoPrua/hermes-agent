@@ -19,6 +19,37 @@ approval:
   cancelled:       "      ✗ Cancelado"
   blocklist_message: "Este comando está na lista de bloqueio incondicional e não pode ser aprovado."
 
+
+# Runtime status strings sent to chat (heartbeat activity, fallback/retry
+# notices, terminal provider failures). Compression-progress templates stay
+# English so gateway/_TELEGRAM_NOISY_STATUS_RE still matches.
+agent:
+  runtime:
+    starting_api_call: "starting API call #{n}"
+    api_error_recovery: "API error recovery (attempt {attempt}/{max})"
+    no_fallback_provider: "No fallback provider available. Try again after the reset, or add a fallback provider in config.yaml."
+    empty_malformed_fallback: "⚠️ Empty/malformed response — switching to fallback..."
+    safety_refusal_fallback: "⚠️ Model declined to respond (safety refusal) — trying fallback..."
+    safety_refusal_terminal: "⚠️ The model declined to respond to this request (safety refusal)."
+    content_filter_fallback: "Content filter terminated stream; switching to fallback..."
+    upstream_rate_limited_fallback: "⚠️ Upstream {provider} rate-limited — switching to fallback model..."
+    billing_unverified_fallback: "⚠️ Provider reported usage/credit exhaustion (unverified — may be a content-filter rejection) — switching to fallback provider..."
+    billing_exhausted_fallback: "⚠️ Billing or credits exhausted — switching to fallback provider..."
+    provider_unreachable_fallback: "⚠️ Provider unreachable — switching to fallback provider..."
+    rate_limited_fallback: "⚠️ Rate limited — switching to fallback provider..."
+    auth_failed_fallback: "🔐 Authentication failed and could not be refreshed — switching to fallback provider..."
+    safety_filter_fallback: "⚠️ Provider safety filter blocked this request — trying fallback..."
+    tls_failed_fallback: "⚠️ TLS certificate verification failed — trying fallback..."
+    non_retryable_fallback: "⚠️ Non-retryable error (HTTP {status_code}) — trying fallback..."
+    safety_filter_terminal: "❌ Provider safety filter blocked this request: {summary}"
+    tls_failed_terminal: "❌ TLS certificate verification failed: {summary}"
+    non_retryable_terminal: "❌ Non-retryable error (HTTP {status_code}): {summary}"
+    billing_unverified_terminal: "❌ Provider reported usage/credit exhaustion (unverified — may be a content-filter rejection) — {summary}"
+    billing_exhausted_terminal: "❌ Billing or credits exhausted — {summary}"
+    rate_limited_exhausted: "❌ Rate limited after {max} retries — {summary}"
+    empty_responses_fallback: "⚠️ Model returning empty responses — switching to fallback provider..."
+    billing_terminal_label: "Billing or credits exhausted: {summary}"
+
 gateway:
   approval_expired: "⚠️ A aprovação expirou (o agente já não está à espera). Peça ao agente para tentar novamente."
   draining:         "⏳ A aguardar que {count} agente(s) ativo(s) terminem antes de reiniciar..."
@@ -441,3 +472,23 @@ Future messages in this room will use that transcript until `/reset` or another 
     session_db_unavailable_prefix: "Base de dados de sessões indisponível"
     session_not_found:           "Sessão não encontrada na base de dados."
     warn_passthrough:            "⚠️ {error}"
+
+  # Busy-session waits, drain notices, and /new /undo confirm details.
+  runtime:
+    drain_queued_restart: "⏳ Gateway restarting — queued for the next turn after it comes back."
+    drain_queued_shutdown: "⏳ Gateway shutting down — queued for the next turn after it comes back."
+    drain_not_accepting_turn_restart: "⏳ Gateway is restarting and is not accepting another turn right now."
+    drain_not_accepting_turn_shutdown: "⏳ Gateway is shutting down and is not accepting another turn right now."
+    drain_not_accepting_work_restart: "⏳ Gateway is restarting and is not accepting new work right now."
+    drain_not_accepting_work_shutdown: "⏳ Gateway is shutting down and is not accepting new work right now."
+    subagent_working: "⏳ Subagent working{detail} — your message is queued for when it finishes (use /stop to cancel everything)."
+    compressing_context: "⏳ Compressing context{detail} — your message is queued for when it finishes (use /stop to cancel everything)."
+    queued_next_turn: "⏳ Queued for the next turn{detail}. I'll respond once the current task finishes."
+    interrupting: "⚡ Interrupting current task{detail}. I'll respond to your message shortly."
+    queued_short: "Queued for the next turn."
+    queued_depth: "Queued for the next turn. ({depth} queued)"
+    steer_queued_starting: "Agent still starting — /steer queued for the next turn."
+    steer_queued_no_agent: "No active agent — /steer queued for the next turn."
+    confirm_new_detail: "This starts a fresh session and discards the current conversation history."
+    confirm_undo_one: "This removes the last user/assistant exchange from history."
+    confirm_undo_many: "This removes the last {count} user turns from history."

@@ -2,9 +2,10 @@
 
 Scope (thin slice, by design): only the highest-impact static strings shown
 to the user by Hermes itself -- approval prompts, a handful of gateway slash
-command replies, restart-drain notices.  Agent-generated output, log lines,
-error tracebacks, tool outputs, and slash-command descriptions all stay in
-English.
+command replies, restart-drain notices, and selected runtime status / busy-wait
+strings.  Agent-generated output, log lines, error tracebacks, tool outputs,
+slash-command descriptions, and compression-progress templates (matched by
+``_TELEGRAM_NOISY_STATUS_RE``) all stay in English.
 
 Catalog files live under ``locales/<lang>.yaml`` at the repo root.  Each
 catalog is a flat dict keyed by dotted paths (e.g. ``approval.choose`` or

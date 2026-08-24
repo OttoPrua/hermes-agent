@@ -39,6 +39,7 @@ from agent.conversation_compression import (
 from agent.context_engine import automatic_compaction_status_message
 from agent.display import KawaiiSpinner
 from agent.error_classifier import FailoverReason, classify_api_error
+from agent.i18n import t
 from agent.message_metadata import append_message
 from agent.turn_context import (
     _compression_warrants_another_preflight_pass,
@@ -771,7 +772,7 @@ def _billing_terminal_label(summary: str, unverified: bool) -> str:
             "Provider reported usage/credit exhaustion (unverified — the same "
             f"error can be a content-filter rejection, not billing): {summary}"
         )
-    return f"Billing or credits exhausted: {summary}"
+    return t("agent.runtime.billing_terminal_label", summary=summary)
 
 
 def _billing_failure_result(
@@ -2053,7 +2054,7 @@ def run_conversation(
         
         api_call_count += 1
         agent._api_call_count = api_call_count
-        agent._touch_activity(f"starting API call #{api_call_count}")
+        agent._touch_activity(t("agent.runtime.starting_api_call", n=api_call_count))
 
         # Grace call: the budget is exhausted but we gave the model one
         # more chance.  Consume the grace flag so the loop exits after
@@ -2922,9 +2923,7 @@ def run_conversation(
                         return {
                             "final_response": (
                                 f"⏳ {_nous_msg}\n\n"
-                                "No fallback provider available. "
-                                "Try again after the reset, or add a "
-                                "fallback provider in config.yaml."
+                                + t("agent.runtime.no_fallback_provider")
                             ),
                             "messages": messages,
                             "api_calls": api_call_count,
@@ -3392,7 +3391,7 @@ def run_conversation(
                     # rate-limit symptom.  Switch to fallback immediately
                     # rather than retrying with extended backoff.
                     if agent._fallback_index < len(agent._fallback_chain):
-                        agent._buffer_status("⚠️ Empty/malformed response — switching to fallback...")
+                        agent._buffer_status(t("agent.runtime.empty_malformed_fallback"))
                     if agent._try_activate_fallback():
                         active_system_prompt = _sync_failover_system_message(
                             agent, api_messages, active_system_prompt)
@@ -3643,7 +3642,7 @@ def run_conversation(
                     # refuse); otherwise surface the refusal terminally.
                     if agent._has_pending_fallback():
                         agent._buffer_status(
-                            "⚠️ Model declined to respond (safety refusal) — trying fallback..."
+                            t("agent.runtime.safety_refusal_fallback")
                         )
                     if agent._try_activate_fallback():
                         active_system_prompt = _sync_failover_system_message(
@@ -3667,7 +3666,7 @@ def run_conversation(
                         _refusal_log or "(no text)",
                     )
                     agent._emit_status(
-                        "⚠️ The model declined to respond to this request (safety refusal)."
+                        t("agent.runtime.safety_refusal_terminal")
                     )
 
                     _refusal_detail = (
@@ -3867,7 +3866,7 @@ def run_conversation(
                                 force=True,
                             )
                             agent._emit_status(
-                                "Content filter terminated stream; switching to fallback..."
+                                t("agent.runtime.content_filter_fallback")
                             )
                             if agent._try_activate_fallback():
                                 # Roll the partial content (if any was already
@@ -5187,7 +5186,11 @@ def run_conversation(
                 retry_count += 1
                 elapsed_time = time.time() - api_start_time
                 agent._touch_activity(
-                    f"API error recovery (attempt {retry_count}/{max_retries})"
+                    t(
+                        "agent.runtime.api_error_recovery",
+                        attempt=retry_count,
+                        max=max_retries,
+                    )
                 )
                 
                 error_type = type(api_error).__name__
@@ -5482,27 +5485,27 @@ def run_conversation(
                                 "upstream_provider", "aggregator"
                             )
                             agent._buffer_status(
-                                f"⚠️ Upstream {_upstream_name} rate-limited — "
-                                "switching to fallback model..."
+                                t(
+                                    "agent.runtime.upstream_rate_limited_fallback",
+                                    provider=_upstream_name,
+                                )
                             )
                         elif classified.reason == FailoverReason.billing:
                             if classified.billing_unverified:
                                 # Ambiguous body (#82154) — don't assert billing.
                                 agent._buffer_status(
-                                    "⚠️ Provider reported usage/credit exhaustion "
-                                    "(unverified — may be a content-filter rejection) "
-                                    "— switching to fallback provider..."
+                                    t("agent.runtime.billing_unverified_fallback")
                                 )
                             else:
                                 agent._buffer_status(
-                                    "⚠️ Billing or credits exhausted — switching to fallback provider..."
+                                    t("agent.runtime.billing_exhausted_fallback")
                                 )
                         elif _is_transport_failure:
                             agent._buffer_status(
-                                "⚠️ Provider unreachable — switching to fallback provider..."
+                                t("agent.runtime.provider_unreachable_fallback")
                             )
                         else:
-                            agent._buffer_status("⚠️ Rate limited — switching to fallback provider...")
+                            agent._buffer_status(t("agent.runtime.rate_limited_fallback"))
                         if agent._try_activate_fallback(reason=classified.reason):
                             active_system_prompt = _sync_failover_system_message(
                                 agent, api_messages, active_system_prompt)
@@ -5534,8 +5537,7 @@ def run_conversation(
                 ):
                     _retry.auth_failover_attempted = True
                     agent._buffer_status(
-                        "🔐 Authentication failed and could not be refreshed — "
-                        "switching to fallback provider..."
+                        t("agent.runtime.auth_failed_fallback")
                     )
                     if agent._try_activate_fallback(reason=classified.reason):
                         active_system_prompt = _sync_failover_system_message(
@@ -6145,11 +6147,16 @@ def run_conversation(
                     # abort silently (#35314, #17446).
                     if agent._has_pending_fallback():
                         if classified.reason == FailoverReason.content_policy_blocked:
-                            agent._buffer_status("⚠️ Provider safety filter blocked this request — trying fallback...")
+                            agent._buffer_status(t("agent.runtime.safety_filter_fallback"))
                         elif classified.reason == FailoverReason.ssl_cert_verification:
-                            agent._buffer_status("⚠️ TLS certificate verification failed — trying fallback...")
+                            agent._buffer_status(t("agent.runtime.tls_failed_fallback"))
                         else:
-                            agent._buffer_status(f"⚠️ Non-retryable error (HTTP {status_code}) — trying fallback...")
+                            agent._buffer_status(
+                                t(
+                                    "agent.runtime.non_retryable_fallback",
+                                    status_code=status_code,
+                                )
+                            )
                     if agent._try_activate_fallback():
                         active_system_prompt = _sync_failover_system_message(
                             agent, api_messages, active_system_prompt)
@@ -6174,18 +6181,25 @@ def run_conversation(
                     _nonretryable_summary = agent._summarize_api_error(api_error)
                     if classified.reason == FailoverReason.content_policy_blocked:
                         agent._emit_status(
-                            f"❌ Provider safety filter blocked this request: "
-                            f"{_nonretryable_summary}"
+                            t(
+                                "agent.runtime.safety_filter_terminal",
+                                summary=_nonretryable_summary,
+                            )
                         )
                     elif classified.reason == FailoverReason.ssl_cert_verification:
                         agent._emit_status(
-                            f"❌ TLS certificate verification failed: "
-                            f"{_nonretryable_summary}"
+                            t(
+                                "agent.runtime.tls_failed_terminal",
+                                summary=_nonretryable_summary,
+                            )
                         )
                     else:
                         agent._emit_status(
-                            f"❌ Non-retryable error (HTTP {status_code}): "
-                            f"{_nonretryable_summary}"
+                            t(
+                                "agent.runtime.non_retryable_terminal",
+                                status_code=status_code,
+                                summary=_nonretryable_summary,
+                            )
                         )
                     agent._vprint(f"{agent.log_prefix}❌ Non-retryable client error (HTTP {status_code}). Aborting.", force=True)
                     agent._vprint(f"{agent.log_prefix}   🔌 Provider: {_provider}  Model: {_model}", force=True)
@@ -6380,11 +6394,18 @@ def run_conversation(
                         if classified.billing_unverified:
                             # Ambiguous body (#82154) — hedge the terminal line.
                             agent._emit_status(
-                                "❌ Provider reported usage/credit exhaustion "
-                                f"(unverified — may be a content-filter rejection) — {_final_summary}"
+                                t(
+                                    "agent.runtime.billing_unverified_terminal",
+                                    summary=_final_summary,
+                                )
                             )
                         else:
-                            agent._emit_status(f"❌ Billing or credits exhausted — {_final_summary}")
+                            agent._emit_status(
+                                t(
+                                    "agent.runtime.billing_exhausted_terminal",
+                                    summary=_final_summary,
+                                )
+                            )
                         _billing_guidance = _billing_or_entitlement_message(
                             capability="model access",
                             provider=_provider,
@@ -6401,7 +6422,13 @@ def run_conversation(
                             unverified=classified.billing_unverified,
                         )
                     elif is_rate_limited:
-                        agent._emit_status(f"❌ Rate limited after {max_retries} retries — {_final_summary}")
+                        agent._emit_status(
+                            t(
+                                "agent.runtime.rate_limited_exhausted",
+                                max=max_retries,
+                                summary=_final_summary,
+                            )
+                        )
                     else:
                         agent._emit_status(f"❌ API failed after {max_retries} retries — {_final_summary}")
                     agent._vprint(f"{agent.log_prefix}   💀 Final error: {_final_summary}", force=True)
@@ -7957,8 +7984,7 @@ def run_conversation(
                             agent.provider,
                         )
                         agent._buffer_status(
-                            "⚠️ Model returning empty responses — "
-                            "switching to fallback provider..."
+                            t("agent.runtime.empty_responses_fallback")
                         )
                         if agent._try_activate_fallback():
                             active_system_prompt = _sync_failover_system_message(

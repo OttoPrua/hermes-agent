@@ -8998,6 +8998,11 @@ class GatewayRunner(GatewayAuthorizationMixin, GatewayKanbanWatchersMixin, Gatew
     def _status_action_gerund(self) -> str:
         return "restarting" if self._restart_requested else "shutting down"
 
+    def _drain_wait_message(self, kind: str) -> str:
+        """User-facing drain wait/reject copy for restart vs shutdown."""
+        action = "restart" if self._restart_requested else "shutdown"
+        return t(f"gateway.runtime.drain_{kind}_{action}")
+
     def _queue_during_drain_enabled(
         self, busy_input_mode: Optional[str] = None
     ) -> bool:
@@ -10220,9 +10225,9 @@ class GatewayRunner(GatewayAuthorizationMixin, GatewayKanbanWatchersMixin, Gatew
             thread_meta = self._thread_metadata_for_source(event.source, reply_anchor)
             if self._queue_during_drain_enabled(effective_mode):
                 self._queue_or_replace_pending_event(session_key, event)
-                message = f"⏳ Gateway {self._status_action_gerund()} — queued for the next turn after it comes back."
+                message = self._drain_wait_message("queued")
             else:
-                message = f"⏳ Gateway is {self._status_action_gerund()} and is not accepting another turn right now."
+                message = self._drain_wait_message("not_accepting_turn")
 
             await adapter._send_with_retry(
                 chat_id=event.source.chat_id,
@@ -10568,25 +10573,13 @@ class GatewayRunner(GatewayAuthorizationMixin, GatewayKanbanWatchersMixin, Gatew
             # #30170 — explain the demotion so the user knows their
             # follow-up didn't accidentally kill the subagent and
             # discovers `/stop` as the explicit escape hatch.
-            message = (
-                f"⏳ Subagent working{status_detail} — your message is queued for "
-                f"when it finishes (use /stop to cancel everything)."
-            )
+            message = t("gateway.runtime.subagent_working", detail=status_detail)
         elif is_queue_mode and demoted_for_compression:
-            message = (
-                f"⏳ Compressing context{status_detail} — your message is queued for "
-                f"when it finishes (use /stop to cancel everything)."
-            )
+            message = t("gateway.runtime.compressing_context", detail=status_detail)
         elif is_queue_mode:
-            message = (
-                f"⏳ Queued for the next turn{status_detail}. "
-                f"I'll respond once the current task finishes."
-            )
+            message = t("gateway.runtime.queued_next_turn", detail=status_detail)
         else:
-            message = (
-                f"⚡ Interrupting current task{status_detail}. "
-                f"I'll respond to your message shortly."
-            )
+            message = t("gateway.runtime.interrupting", detail=status_detail)
 
         # First-touch onboarding: the very first time a user sends a message
         # while the agent is busy, append a one-time hint explaining the
@@ -16607,8 +16600,8 @@ class GatewayRunner(GatewayAuthorizationMixin, GatewayKanbanWatchersMixin, Gatew
             self._enqueue_fifo(quick_key, queued_event, adapter)
         depth = self._queue_depth(quick_key, adapter=self._adapter_for_source(source))
         if depth <= 1:
-            return "Queued for the next turn."
-        return f"Queued for the next turn. ({depth} queued)"
+            return t("gateway.runtime.queued_short")
+        return t("gateway.runtime.queued_depth", depth=depth)
 
     async def _busy_steer_command(self, event: MessageEvent, quick_key: str, source):
         # /steer <prompt> — inject mid-run after the next tool call.
@@ -16634,7 +16627,7 @@ class GatewayRunner(GatewayAuthorizationMixin, GatewayKanbanWatchersMixin, Gatew
                     channel_context=event.channel_context,
                 )
                 self._enqueue_fifo(quick_key, queued_event, adapter)
-            return "Agent still starting — /steer queued for the next turn."
+            return t("gateway.runtime.steer_queued_starting")
         if running_agent and hasattr(running_agent, "steer"):
             try:
                 accepted = running_agent.steer(steer_text)
@@ -16657,7 +16650,7 @@ class GatewayRunner(GatewayAuthorizationMixin, GatewayKanbanWatchersMixin, Gatew
                 channel_context=event.channel_context,
             )
             self._enqueue_fifo(quick_key, queued_event, adapter)
-        return "No active agent — /steer queued for the next turn."
+        return t("gateway.runtime.steer_queued_no_agent")
 
     async def _busy_goal_command(self, event: MessageEvent, quick_key: str, source):
         # /goal is safe mid-run for status/pause/clear/wait (inspection
@@ -17347,9 +17340,9 @@ class GatewayRunner(GatewayAuthorizationMixin, GatewayKanbanWatchersMixin, Gatew
                 if queue_during_drain:
                     self._queue_or_replace_pending_event(_quick_key, event)
                 return (
-                    f"⏳ Gateway {self._status_action_gerund()} — queued for the next turn after it comes back."
+                    self._drain_wait_message("queued")
                     if queue_during_drain
-                    else f"⏳ Gateway is {self._status_action_gerund()} and is not accepting another turn right now."
+                    else self._drain_wait_message("not_accepting_turn")
                 )
             if effective_busy_input_mode == "queue":
                 logger.debug("PRIORITY queue follow-up for session %s", _quick_key)
@@ -17594,10 +17587,7 @@ class GatewayRunner(GatewayAuthorizationMixin, GatewayKanbanWatchersMixin, Gatew
                 event=event,
                 command="new",
                 title="/new",
-                detail=(
-                    "This starts a fresh session and discards the current "
-                    "conversation history."
-                ),
+                detail=t("gateway.runtime.confirm_new_detail"),
                 execute=_do_reset,
             )
 
@@ -17783,9 +17773,9 @@ class GatewayRunner(GatewayAuthorizationMixin, GatewayKanbanWatchersMixin, Gatew
                 except (ValueError, IndexError):
                     _undo_n = 1
             _undo_detail = (
-                "This removes the last user/assistant exchange from history."
+                t("gateway.runtime.confirm_undo_one")
                 if _undo_n == 1
-                else f"This removes the last {_undo_n} user turns from history."
+                else t("gateway.runtime.confirm_undo_many", count=_undo_n)
             )
             return await self._maybe_confirm_destructive_slash(
                 event=event,
@@ -17935,7 +17925,7 @@ class GatewayRunner(GatewayAuthorizationMixin, GatewayKanbanWatchersMixin, Gatew
             return await self._handle_voice_command(event)
 
         if self._draining:
-            return f"⏳ Gateway is {self._status_action_gerund()} and is not accepting new work right now."
+            return self._drain_wait_message("not_accepting_work")
 
         # User-defined quick commands (bypass agent loop, no LLM call)
         if command:
